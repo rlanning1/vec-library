@@ -2,6 +2,11 @@
 
 A Python library for representing and manipulating complex vectors (phasors). Vectors can be expressed in rectangular (`a + jb`) or polar (`M ∠ θ`) form and used directly in arithmetic expressions.
 
+This vector arithmetic module represents an upgrade to a Python class I created years ago to aid in the design of UHF and Microwave amplifiers. The library would be especially useful to engineering students who analyze electrical circuits containing reactive components. Considering my humble introduction to A.C. Circuit Analysis in the early 1970s, where vector operations were carried out on a slide rule, modern computer solutions allow students to focus on theory without becoming lost in the repetitive conversions between rectangular and polar form vectors.
+
+
+Feel free to email feedback and offer suggestions for feature updates.
+
 ---
 
 ## Features
