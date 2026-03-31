@@ -1,0 +1,11 @@
+LICENSE
+README.md
+pyproject.toml
+tests/test_vec.py
+vec/__init__.py
+vec/core.py
+vec/parser.py
+vec_library.egg-info/PKG-INFO
+vec_library.egg-info/SOURCES.txt
+vec_library.egg-info/dependency_links.txt
+vec_library.egg-info/top_level.txt
