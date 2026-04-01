@@ -43,4 +43,4 @@ POLAR = 1   # Polar form
 RADIANS: bool = False
 
 __all__ = ["Vector", "Vec", "VecError", "RECT", "POLAR", "RADIANS"]
-__version__ = "1.0.1"
+__version__ = "1.1.0"

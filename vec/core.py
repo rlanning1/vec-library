@@ -5,6 +5,7 @@ Provides the Vector class for representing and manipulating complex vectors
 (phasors) in both rectangular and polar forms.
 """
 
+import inspect
 import math
 from typing import Union
 
@@ -64,14 +65,16 @@ class Vector:
         self._attrs: list[str] = []
 
         if init_str is not None:
-            self._parse_and_set(init_str)
+            caller_locals = inspect.currentframe().f_back.f_locals
+            self._parse_and_set(init_str, caller_locals)
 
     def initialize(self, init_str: str) -> None:
         """
         Initialize (or re-initialize) the vector from an initialization string.
 
         If the vector was previously initialized, the attribute list is cleared
-        before the new string is parsed.
+        before the new string is parsed.  Variable names in *init_str* are
+        resolved against the caller's local scope.
 
         Parameters
         ----------
@@ -80,18 +83,21 @@ class Vector:
         Raises
         ------
         VecError
-            If the initialization string cannot be parsed.
+            If the initialization string cannot be parsed, or if a variable
+            name in the string cannot be resolved to a numeric value.
         """
+        caller_locals = inspect.currentframe().f_back.f_locals
         self._attrs = []
         self._initialized = False
-        self._parse_and_set(init_str)
+        self._parse_and_set(init_str, caller_locals)
 
-    def _parse_and_set(self, init_str: str) -> None:
+    def _parse_and_set(self, init_str: str, caller_locals: dict = None) -> None:
         """Internal: parse init_str and populate internal state."""
         from vec.parser import parse   # deferred to avoid circular import
         import vec                     # deferred to read RADIANS flag
 
-        real, imag, attrs = parse(init_str, global_radians=vec.RADIANS)
+        real, imag, attrs = parse(init_str, global_radians=vec.RADIANS,
+                                  caller_locals=caller_locals)
         self._real = real
         self._imag = imag
         self._mag = math.hypot(real, imag)

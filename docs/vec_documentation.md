@@ -1,7 +1,7 @@
 # pyVectors — Python Vector Library
 ## User Documentation
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Package:** `vec`
 **Authors:** Ron Lanning, Claude Sonnet 4.6
 
@@ -15,14 +15,15 @@
 4. [Importing the Library](#4-importing-the-library)
 5. [Creating Vectors](#5-creating-vectors)
 6. [Initialization String Reference](#6-initialization-string-reference)
-7. [Angle Unit Selection](#7-angle-unit-selection)
-8. [Value Extraction Methods](#8-value-extraction-methods)
-9. [Arithmetic Operations](#9-arithmetic-operations)
-10. [String Representation](#10-string-representation)
-11. [Attribute Switches](#11-attribute-switches)
-12. [Utility Methods](#12-utility-methods)
-13. [Error Handling](#13-error-handling)
-14. [Worked Examples](#14-worked-examples)
+7. [Variable Substitution in Initialization Strings](#7-variable-substitution-in-initialization-strings)
+8. [Angle Unit Selection](#8-angle-unit-selection)
+9. [Value Extraction Methods](#8-value-extraction-methods)
+10. [Arithmetic Operations](#9-arithmetic-operations)
+11. [String Representation](#10-string-representation)
+12. [Attribute Switches](#11-attribute-switches)
+13. [Utility Methods](#12-utility-methods)
+14. [Error Handling](#13-error-handling)
+15. [Worked Examples](#14-worked-examples)
 
 ---
 
@@ -33,6 +34,7 @@
 Key features:
 
 - Flexible initialization strings support both rectangular and polar input, with or without explicit angle notation
+- **Variable substitution**: Python variable names may be used directly inside initialization strings — the library resolves their values from the caller's local scope at construction time
 - Both forms are maintained internally at all times, so you can query either without conversion
 - Full arithmetic operator support (`+`, `-`, `*`, `/`, negation, `abs()`) accepting both `Vector` operands and plain scalars
 - An attribute switch system allows user-defined metadata to be attached to vectors and propagated through calculations
@@ -232,7 +234,99 @@ V4 = Vector(r"10 +A45 \deg")         # angle in degrees (\deg override)
 
 ---
 
-## 7. Angle Unit Selection
+---
+
+## 7. Variable Substitution in Initialization Strings
+
+Starting in v1.1.0, initialization strings may contain Python variable names in place of numeric literals. When `Vector()` or `initialize()` is called, the library automatically looks up each identifier in the **caller's local scope** and substitutes its value before parsing.
+
+### 7.1 Basic usage
+
+```python
+from vec import Vector, RECT, POLAR
+
+R11 = 10000.0
+Xc  = 452.0
+m   = 20.22
+a   = 45.0
+
+V1 = Vector("R11 +j Xc")    # equivalent to Vector("10000.0 +j 452.0")
+V2 = Vector("m < a")         # equivalent to Vector("20.22 < 45.0")
+V3 = 5.0 * V1 / V2
+```
+
+Variable substitution is always attempted — no opt-in is needed. Strings that contain only numeric literals pass through unchanged.
+
+### 7.2 Supported variable types
+
+Only `int` and `float` variables are accepted. If a variable exists but holds another type (e.g., a string or list), `VecError` is raised.
+
+### 7.3 Protected tokens
+
+The single-character tokens `j` and `A` are **never** substituted — they are structural syntax characters (the imaginary-unit and angle separators). Compact fused forms such as `j4` or `A45` are also protected.
+
+Attribute-switch tokens (e.g., `\rad`, `\parallel`) are excluded from substitution automatically.
+
+### 7.4 Variable naming rules and recommendations
+
+Variable names must follow standard Python identifier rules: start with a letter or underscore, followed by any combination of letters, digits, and underscores. The names `j` and `A` are reserved by the parser.
+
+| Variable name | Valid? | Reason |
+|---|---|---|
+| `R11`, `R001` | ✓ | Letter prefix, digits allowed after |
+| `Xc`, `resistance` | ✓ | Standard identifiers |
+| `_r`, `_x` | ✓ | Underscore prefix allowed |
+| `j`, `A` | ✗ | Reserved structural tokens |
+| `2R` | ✗ | Starts with a digit — not a valid Python identifier |
+
+> **Recommendation — always place a space between `j` (or `A`) and a following variable name.**
+>
+> Without a space, `+jXc` is read as the single identifier `jXc`, not as `j` followed by the variable `Xc`. This will cause a `VecError` unless a local variable named `jXc` happens to exist.
+>
+> ```python
+> Xc = 452.0
+> V = Vector("R11 +j Xc")    # correct — space separates j from variable
+> V = Vector("R11 +jXc")     # avoid — 'jXc' treated as one identifier
+> ```
+>
+> The `<` and `∠` polar notations are naturally separated by whitespace and are not affected by this issue.
+
+### 7.5 Variable substitution with `initialize()`
+
+The `initialize()` method resolves variables from **its own caller's** local scope, just like the constructor:
+
+```python
+def setup():
+    R = 330.0
+    X = 75.5
+    V = Vector(None)
+    V.initialize("R +j X")    # R and X resolved here
+    return V
+```
+
+### 7.6 Scope limitation
+
+The library looks one call frame up the stack — into the direct caller's locals. Module-level variables or variables from an enclosing scope that are not present in `f_locals` will not be found. Bring them into local scope first if needed:
+
+```python
+GLOBAL_R = 1000.0
+
+def build():
+    R = GLOBAL_R    # local reference
+    return Vector("R +j0")
+```
+
+### 7.7 Error conditions
+
+| Condition | Result |
+|---|---|
+| Identifier found in locals, valid numeric type | Substituted silently |
+| Identifier **not** found in locals | `VecError` raised immediately |
+| Identifier found but value is not `int` or `float` | `VecError` raised immediately |
+
+---
+
+## 8. Angle Unit Selection
 
 The library provides three levels of angle unit control, listed here in order of priority:
 
@@ -302,7 +396,7 @@ When a result carries both `\rad` and `\deg` (from operands with different attri
 
 ---
 
-## 8. Value Extraction Methods
+## 9. Value Extraction Methods
 
 All value extraction methods raise `VecError` if called on an uninitialized vector.
 
@@ -367,7 +461,7 @@ print(m, theta)    # 5.0  53.13010235415598
 
 ---
 
-## 9. Arithmetic Operations
+## 10. Arithmetic Operations
 
 All arithmetic operators accept either a `Vector` operand or a plain scalar (`int` or `float`). Scalars are automatically treated as a purely real vector (`scalar + j0`) with no attributes.
 
@@ -451,7 +545,7 @@ result = 5 * V1 - V2 + Vector("1 +j0")
 
 ---
 
-## 10. String Representation
+## 11. String Representation
 
 ### `asString(form, fmt1=None, fmt2=None)`
 
@@ -519,7 +613,7 @@ repr(V_uninit)
 
 ---
 
-## 11. Attribute Switches
+## 12. Attribute Switches
 
 Every `Vector` object maintains an internal list of user-defined string attributes. Attributes function as on/off switches: an attribute is either present in the list or it is not.
 
@@ -596,7 +690,7 @@ When both `\rad` and `\deg` are present (e.g., inherited by a result vector), `\
 
 ---
 
-## 12. Utility Methods
+## 13. Utility Methods
 
 ### `conjugate()`
 
@@ -624,7 +718,7 @@ V1.hasAttrib(r"\modified")     # False — V1 is unaffected
 
 ---
 
-## 13. Error Handling
+## 14. Error Handling
 
 The library defines a custom exception class:
 
@@ -642,6 +736,8 @@ All library errors raise `VecError`. The conditions that trigger it are:
 | Invalid initialization string | Describes the malformed input |
 | Division by a zero vector | `"Division by a zero vector."` |
 | Invalid attribute name (empty or > 15 chars) | Describes the invalid name |
+| Variable name in init string not found in caller's local scope | Names the missing variable |
+| Variable in init string is not `int` or `float` | Names the variable and its type |
 
 **Catching errors:**
 
@@ -662,7 +758,7 @@ except VecError as e:
 
 ---
 
-## 14. Worked Examples
+## 15. Worked Examples
 
 ### Example 1 — Parallel impedance
 
@@ -815,6 +911,31 @@ V3 = 5 * V1 / V2
 print(V3.asString(RECT))
 print(V3.asString(POLAR, fmt1="6.3f", fmt2="5.1f"))
 ```
+
+### Example 9 — Variable substitution in initialization strings
+
+Circuit component values are stored as plain Python variables and used directly inside initialization strings:
+
+```python
+from vec import Vector, RECT, POLAR
+
+# Component values
+R1  = 10000.0    # 10 kΩ resistance
+Xc  = 452.0      # capacitive reactance
+mag = 120.0      # source voltage magnitude
+phi = 30.0       # source phase angle
+
+# Variables resolved automatically at construction time
+Z   = Vector("R1 +j Xc")          # 10000.0 +j452.0
+Vs  = Vector("mag < phi")          # 120.0 ∠ 30°
+
+I   = Vs / Z
+
+print("Impedance:", Z.asString(POLAR,  fmt1=".2f", fmt2=".3f"))
+print("Current:  ", I.asString(POLAR,  fmt1=".6f", fmt2=".4f"))
+print("Current:  ", I.asString(RECT,   fmt1=".6f", fmt2=".6f"))
+```
+
 
 ---
 

@@ -1,3 +1,46 @@
+Metadata-Version: 2.4
+Name: pyVectors
+Version: 1.0.1
+Summary: A Python library for representing and manipulating complex vectors (phasors).
+Author: Ron Lanning, Claude Sonnet 4.6
+License: MIT License
+        
+        Copyright (c) 2026
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/rlanning1/pyVectors
+Project-URL: Issues, https://github.com/rlanning1/pyVectors/issues
+Keywords: vector,phasor,complex,electrical engineering,math
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering :: Mathematics
+Classifier: Topic :: Scientific/Engineering :: Physics
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
 # pyVectors — Python Vector Library
 
 A Python library for representing and manipulating complex vectors (phasors). Vectors can be expressed in rectangular (`a + jb`) or polar (`M ∠ θ`) form and used directly in arithmetic expressions.
@@ -17,7 +60,6 @@ Feel free to email feedback and offer suggestions for feature updates.
 - Full arithmetic operator support: `+`, `-`, `*`, `/`, negation, `abs()`
 - Scalars can be used directly as operands alongside `Vector` objects
 - User-defined attribute switches that propagate through calculations
-- **Variable substitution**: use Python variable names directly inside initialization strings — values are resolved from the caller's local scope automatically
 - Angles default to degrees; set `RADIANS = True` for a global radians default
 - Per-vector overrides via the `\rad` attribute (radians) and `\deg` attribute (degrees)
 - Clear error reporting through a custom `VecError` exception
@@ -210,16 +252,3 @@ The internal design specification is in [`docs/spec/vec_specification.md`](docs/
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-## Changelog
-
-### v1.1.0 (2026-04-01)
-- Added variable substitution in initialization strings: Python variable names are now resolved from the caller's local scope at construction time
-- `j` and `A` are protected from substitution; compact fused forms (`j4`, `A45`) are also protected
-- Rectangular form parser now accepts a space between `j` and the imaginary magnitude (e.g., `+j 452.0`)
-- Updated documentation, specification, and test suite
-
-### v1.0.1 (2026-03-31)
-- Initial public release

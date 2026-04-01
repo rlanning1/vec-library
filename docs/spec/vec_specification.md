@@ -1,8 +1,8 @@
 # pyVectors — Python Vector Library
 ## Finalized Specification
 
-**Version:** 1.0.1
-**Date:** 2026-03-31
+**Version:** 1.1.0
+**Date:** 2026-04-01
 **Status:** Approved
 **Authors:** Ron Lanning, Claude Sonnet 4.6
 
@@ -17,18 +17,19 @@
 3. [Module-Level Constants and Variables](#module-level-constants-and-variables)
 4. [Class: Vector](#class-vector)
 5. [Initialization Strings](#initialization-strings)
-6. [Attribute Switches](#attribute-switches)
-7. [Angle Unit Selection](#angle-unit-selection)
-8. [Operator Methods](#operator-methods)
-9. [Value Extraction Methods](#value-extraction-methods)
-10. [String Representation Methods](#string-representation-methods)
-11. [Utility Methods](#utility-methods)
-12. [Internal Representation](#internal-representation)
-13. [Scalar Conversion Rules](#scalar-conversion-rules)
-14. [Result Vector Rules](#result-vector-rules)
-15. [Error Handling](#error-handling)
-16. [Backward Compatibility](#backward-compatibility)
-17. [General Usage Examples](#general-usage-examples)
+6. [Variable Substitution in Initialization Strings](#variable-substitution-in-initialization-strings)
+7. [Attribute Switches](#attribute-switches)
+8. [Angle Unit Selection](#angle-unit-selection)
+9. [Operator Methods](#operator-methods)
+10. [Value Extraction Methods](#value-extraction-methods)
+11. [String Representation Methods](#string-representation-methods)
+12. [Utility Methods](#utility-methods)
+13. [Internal Representation](#internal-representation)
+14. [Scalar Conversion Rules](#scalar-conversion-rules)
+15. [Result Vector Rules](#result-vector-rules)
+16. [Error Handling](#error-handling)
+17. [Backward Compatibility](#backward-compatibility)
+18. [General Usage Examples](#general-usage-examples)
 
 ---
 
@@ -179,7 +180,119 @@ V = Vector(r"10 +A45 \rad \source")
 
 ---
 
-## 6. Attribute Switches
+## 6. Variable Substitution in Initialization Strings
+
+### 6.1 Overview
+
+Starting in v1.1.0, initialization strings may contain Python variable names in place of numeric literals. The pre-parser resolves each variable by looking it up in the **caller's local scope** at the moment `Vector()` or `initialize()` is called.
+
+```python
+R11 = 10000.0
+Xc  = 452.0
+m   = 20.22
+a   = 45.0
+
+V1 = Vector("R11 +j Xc")    # resolved to "10000.0 +j 452.0"
+V2 = Vector("m < a")         # resolved to "20.22 < 45.0"
+V3 = 5.0 * V1 / V2
+```
+
+Variable substitution is applied to **every** initialization string before any parsing occurs. No opt-in is required.
+
+### 6.2 Resolution Rules
+
+1. Every token in the value portion of the string that matches the Python identifier pattern `[A-Za-z_][A-Za-z0-9_]*` is a candidate for substitution.
+2. The token is looked up in the caller's `f_locals` dictionary at call time.
+3. If found and the value is `int` or `float`, it is replaced with `str(float(value))`.
+4. If not found, `VecError` is raised immediately.
+5. If found but the value is not `int` or `float`, `VecError` is raised.
+
+### 6.3 Protected Tokens
+
+The single-character tokens `j` and `A` are **always** protected — they are structural syntax characters in the init string and are never treated as variable names:
+
+- `j` is the imaginary-unit separator in rectangular form (`+j`, `-j`)
+- `A` is the angle separator in polar form (`+A`, `-A`)
+
+Compact fused forms such as `j4`, `j10`, or `A45` (operator letter immediately followed by digits) are also protected. These are the standard compact notation for the rectangular and polar forms and are not variable references.
+
+Attribute-switch tokens (e.g., `ad`, `\parallel`) are exempt from substitution because the pre-parser's token regex uses a negative lookbehind on `\` and only the value portion before any attribute switches is scanned.
+
+### 6.4 Variable Naming Constraints and Recommendations
+
+Variable names used inside initialization strings must satisfy the standard Python identifier rules:
+
+- Must begin with a letter (`A–Z`, `a–z`) or underscore (`_`)
+- Remaining characters may be letters, digits (`0–9`), or underscores
+- Single-character names `j` and `A` are reserved by the parser and cannot be substituted
+
+The following examples illustrate valid and invalid usages:
+
+| Variable name | Valid? | Reason |
+|---|---|---|
+| `R11` | ✓ | Letter prefix, digits allowed after |
+| `R001` | ✓ | Letter prefix, zero-padded digits allowed |
+| `Xc` | ✓ | Standard identifier |
+| `_r`, `_x` | ✓ | Underscore prefix allowed |
+| `resistance` | ✓ | Fully alphabetic |
+| `j` | ✗ | Protected structural token |
+| `A` | ✗ | Protected structural token |
+| `2R` | ✗ | Starts with a digit — not a valid Python identifier |
+
+> **Recommendation — use a space before the variable name in rectangular form.**
+>
+> The compact fused forms (`+j4`, `-j10`) are protected from substitution, but forms like `+jXc` — where `j` and a variable name are written without a space — may produce unexpected behavior because the pre-parser will see `jXc` as a single identifier token and attempt to look it up as a variable named `jXc`.
+>
+> Always write a space between `j` and a variable name:
+>
+> ```python
+> Xc = 452.0
+> V = Vector("R11 +j Xc")    # correct — space after j
+> V = Vector("R11 +jXc")     # avoid — 'jXc' is parsed as one identifier
+> ```
+>
+> Similarly for polar `A` notation:
+>
+> ```python
+> theta = 45.0
+> V = Vector("10 +A theta")   # correct — space after A
+> V = Vector("10 +Atheta")    # avoid — 'Atheta' is parsed as one identifier
+> ```
+>
+> The `<` and `∠` notations do not have this adjacency issue and are safe to use with or without a space.
+
+### 6.5 Variable Substitution with `initialize()`
+
+The `initialize()` method also performs variable substitution from its **own** caller's local scope:
+
+```python
+def setup_circuit():
+    R = 330.0
+    X = 75.5
+    V = Vector(None)
+    V.initialize("R +j X")    # R and X resolved from setup_circuit's locals
+    return V
+```
+
+### 6.6 Scope Limitation
+
+The pre-parser looks only one frame up the call stack — the direct caller of `Vector()` or `initialize()`. Variables defined in enclosing scopes (e.g., outer functions, module globals not imported into the local namespace) that are not present in the immediate caller's `f_locals` will not be found and will raise `VecError`.
+
+To use a module-level or outer-scope variable, either assign it locally first or pass it as a literal:
+
+```python
+MODULE_R = 1000.0   # module-level
+
+def build_vector():
+    R = MODULE_R    # bring into local scope
+    V = Vector("R +j0")    # works
+    return V
+```
+
+
+---
+
+## 7. Attribute Switches
 
 Every `Vector` object maintains an internal list of attribute strings. Attributes function as on/off switches — an attribute either exists in the list or it does not.
 
@@ -227,7 +340,7 @@ if V.hasAttrib(r"\parallel"):
 
 ---
 
-## 7. Angle Unit Selection
+## 8. Angle Unit Selection
 
 Angle unit selection is resolved at three levels, applied in the following priority order:
 
@@ -266,7 +379,7 @@ After parsing, `Vector._parse_and_set()` applies the RADIANS auto-injection to t
 
 ---
 
-## 8. Operator Methods
+## 9. Operator Methods
 
 The following operator methods are implemented. Each operator accepts either a `Vector` object or a scalar (numeric) value as the second operand. Scalars are automatically converted to a `Vector` internally before the operation is performed (see Section 13).
 
@@ -289,7 +402,7 @@ Every arithmetic operation **always returns a new `Vector` object**. The operand
 
 ---
 
-## 9. Value Extraction Methods
+## 10. Value Extraction Methods
 
 ```python
 V.real()          # Returns the real component (float)
@@ -304,7 +417,7 @@ mag, ang = V.polar()  # Returns (magnitude, angle) as a tuple
 
 ---
 
-## 10. String Representation Methods
+## 11. String Representation Methods
 
 ### `asString(form, fmt1=None, fmt2=None)`
 
@@ -347,7 +460,7 @@ repr(V)
 
 ---
 
-## 11. Utility Methods
+## 12. Utility Methods
 
 ### `conjugate()`
 
@@ -368,7 +481,7 @@ V2 = V1.copy()
 
 ---
 
-## 12. Internal Representation
+## 13. Internal Representation
 
 - Vectors are stored internally in **both** rectangular (`a + jb`) and polar (`c ∠ θ`) forms at all times.
 - Angles are **always stored internally in radians**, regardless of any attribute setting or the `RADIANS` flag.
@@ -376,7 +489,7 @@ V2 = V1.copy()
 
 ---
 
-## 13. Scalar Conversion Rules
+## 14. Scalar Conversion Rules
 
 When an arithmetic operator receives a scalar (non-`Vector`) operand, the scalar is converted to a `Vector` internally as follows:
 
@@ -392,7 +505,7 @@ result = V1 + 2.5   # 2.5 is converted to Vector("2.5 +j0") internally
 
 ---
 
-## 14. Result Vector Rules
+## 15. Result Vector Rules
 
 When an operation produces a result vector, the following rules govern its state:
 
@@ -427,7 +540,7 @@ All result vectors are considered **fully initialized**.
 
 ---
 
-## 15. Error Handling
+## 16. Error Handling
 
 The library defines a custom exception class `VecError` (inheriting from `Exception`) for all library-specific errors.
 
@@ -437,10 +550,12 @@ The library defines a custom exception class `VecError` (inheriting from `Except
 | Invalid initialization string format | `VecError` |
 | Division by a zero vector | `VecError` (division by zero) |
 | Invalid attribute name (length 0 or > 15) | `VecError` |
+| Variable name in init string not found in caller's local scope | `VecError` |
+| Variable in init string is not `int` or `float` | `VecError` |
 
 ---
 
-## 16. Backward Compatibility
+## 17. Backward Compatibility
 
 The `Vec` name from v1.0.0 is preserved as a module-level alias:
 
@@ -452,7 +567,7 @@ All code written against v1.0.0 continues to work without modification. `Vec` an
 
 ---
 
-## 17. General Usage Examples
+## 18. General Usage Examples
 
 ### Basic Instantiation and Arithmetic
 

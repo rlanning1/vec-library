@@ -812,3 +812,173 @@ class TestDegAttribute:
         assert not V3._rad_mode   # \deg overrides \rad in output
         # V3 = (3+1) + j(4+0) = 4 +j4; angle in degrees = 45.0
         assert approx(V3.ang(), math.degrees(math.atan2(4, 4)))
+
+
+# ===========================================================================
+# 15. VARIABLE SUBSTITUTION PRE-PARSER
+# ===========================================================================
+
+class TestVariableSubstitution:
+    """Tests for the v1.1.0 variable substitution pre-parser."""
+
+    # --- Rectangular form ---------------------------------------------------
+
+    def test_rect_both_vars(self):
+        """Both components supplied as variables — rectangular form."""
+        R11 = 10000.0
+        Xc  = 452.0
+        V = Vector("R11 +j Xc")
+        assert approx(V.real(), 10000.0)
+        assert approx(V.img(),  452.0)
+
+    def test_rect_real_var_imag_literal(self):
+        """Real component is a variable; imaginary is a literal."""
+        resistance = 330.0
+        V = Vector("resistance +j4.7")
+        assert approx(V.real(), 330.0)
+        assert approx(V.img(),  4.7)
+
+    def test_rect_real_literal_imag_var(self):
+        """Real component is a literal; imaginary is a variable."""
+        reactance = 75.5
+        V = Vector("3.0 +j reactance")
+        assert approx(V.real(), 3.0)
+        assert approx(V.img(), 75.5)
+
+    def test_rect_negative_imag_var(self):
+        """Negative imaginary component expressed as a variable."""
+        Xc = 452.0
+        V = Vector("100.0 -j Xc")
+        assert approx(V.real(), 100.0)
+        assert approx(V.img(), -452.0)
+
+    def test_rect_both_literals_unchanged(self):
+        """Pure-literal strings pass through substitution without change."""
+        V = Vector("3.0 +j4.0")
+        assert approx(V.real(), 3.0)
+        assert approx(V.img(), 4.0)
+
+    def test_rect_integer_var(self):
+        """Integer variable values are accepted and converted to float."""
+        n = 5
+        V = Vector("n +j0")
+        assert approx(V.real(), 5.0)
+        assert approx(V.img(), 0.0)
+
+    def test_rect_underscore_var(self):
+        """Variable names with leading underscores are valid identifiers."""
+        _r = 1.0
+        _x = 2.0
+        V = Vector("_r +j _x")
+        assert approx(V.real(), 1.0)
+        assert approx(V.img(), 2.0)
+
+    def test_rect_alphanumeric_var(self):
+        """Variable names that start with a letter then contain digits (R001)."""
+        R001 = 47.0
+        V = Vector("R001 +j0")
+        assert approx(V.real(), 47.0)
+
+    # --- Polar form ---------------------------------------------------------
+
+    def test_polar_both_vars(self):
+        """Both magnitude and angle supplied as variables — polar form."""
+        m = 20.22
+        a = 45.0
+        V = Vector("m < a")
+        assert approx(V.mag(), 20.22)
+        assert approx(V.ang(), 45.0)
+
+    def test_polar_mag_var_angle_literal(self):
+        """Magnitude is a variable; angle is a literal."""
+        magnitude = 10.0
+        V = Vector("magnitude < 30")
+        assert approx(V.mag(), 10.0)
+        assert approx(V.ang(), 30.0)
+
+    def test_polar_mag_literal_angle_var(self):
+        """Magnitude is a literal; angle is a variable."""
+        theta = 60.0
+        V = Vector("5.0 < theta")
+        assert approx(V.mag(), 5.0)
+        assert approx(V.ang(), 60.0)
+
+    def test_polar_unicode_angle_symbol_with_vars(self):
+        """Variable substitution works with the ∠ angle separator."""
+        mag = 7.0
+        ang = 30.0
+        V = Vector("mag ∠ ang")
+        assert approx(V.mag(), 7.0)
+        assert approx(V.ang(), 30.0)
+
+    def test_polar_A_notation_with_vars(self):
+        """Variable substitution works with +A angle notation."""
+        mag = 5.0
+        phi = 90.0
+        V = Vector("mag +A phi")
+        assert approx(V.mag(), 5.0)
+        assert approx(V.ang(), 90.0)
+
+    def test_polar_negative_A_notation_with_var(self):
+        """Variable substitution works with -A angle notation."""
+        mag = 5.0
+        phi = 45.0
+        V = Vector("mag -A phi")
+        assert approx(V.ang(), -45.0)
+
+    # --- Attributes alongside variables ------------------------------------
+
+    def test_vars_with_rad_attr(self):
+        r"""Variable substitution works alongside the \rad attribute."""
+        mag   = 1.0
+        angle = math.pi / 2
+        V = Vector(r"mag +A angle \rad")
+        assert approx(V.real(), 0.0, tol=1e-9)
+        assert approx(V.img(), 1.0, tol=1e-9)
+
+    def test_attr_name_not_substituted(self):
+        r"""Tokens inside attribute switches (e.g. 'rad') are never substituted."""
+        mag = 5.0
+        ang = 45.0
+        # 'rad' appears as part of \rad — must not be treated as a variable
+        V = Vector(r"mag < ang \rad")
+        # just verify it parses without error and uses radians
+        assert approx(V.mag(), 5.0)
+
+    # --- initialize() method ------------------------------------------------
+
+    def test_initialize_with_vars(self):
+        """initialize() resolves variables from its caller's local scope."""
+        V = Vector(None)
+        real_part = 6.0
+        imag_part = 8.0
+        V.initialize("real_part +j imag_part")
+        assert approx(V.real(), 6.0)
+        assert approx(V.img(), 8.0)
+
+    # --- Error handling -----------------------------------------------------
+
+    def test_undefined_var_raises_vecerror(self):
+        """An identifier not found in local scope must raise VecError."""
+        with pytest.raises(VecError, match="not found"):
+            Vector("undefined_variable +j0")
+
+    def test_wrong_type_var_raises_vecerror(self):
+        """A variable whose value is not int or float must raise VecError."""
+        bad_val = "hello"
+        with pytest.raises(VecError, match="str"):
+            Vector("bad_val +j0")
+
+    def test_j_never_substituted(self):
+        """'j' must never be treated as a variable name even if defined locally."""
+        j = 99.0   # should be completely ignored by the pre-parser
+        V = Vector("3.0 +j4.0")
+        assert approx(V.real(), 3.0)
+        assert approx(V.img(), 4.0)
+
+    def test_A_never_substituted(self):
+        """'A' must never be treated as a variable name even if defined locally."""
+        A = 999.0   # should be completely ignored by the pre-parser
+        V = Vector("10 +A45")
+        assert approx(V.mag(), 10.0)
+        assert approx(V.ang(), 45.0)
