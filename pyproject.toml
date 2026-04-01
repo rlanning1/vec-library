@@ -3,12 +3,16 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vec-library"
-version = "1.0.0"
+name = "pyVectors"
+version = "1.0.1"
 description = "A Python library for representing and manipulating complex vectors (phasors)."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
+authors = [
+    { name = "Ron Lanning" },
+    { name = "Claude Sonnet 4.6" },
+]
 keywords = ["vector", "phasor", "complex", "electrical engineering", "math"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -22,9 +26,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rlanning1/vec-library"
-Issues   = "https://github.com/rlanning1/vec-library/issues"
+Homepage = "https://github.com/rlanning1/pyVectors"
+Issues   = "https://github.com/rlanning1/pyVectors/issues"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where   = ["."]
 include = ["vec*"]

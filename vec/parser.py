@@ -1,5 +1,5 @@
 """
-parser.py — Initialization string parsing logic for the Vec library.
+parser.py — Initialization string parsing logic for the pyVectors library.
 
 Handles rectangular and polar form initialization strings, including
 optional attribute switches appended after the vector value.
@@ -13,7 +13,7 @@ import math
 # Attribute extraction helper
 # ---------------------------------------------------------------------------
 
-# Matches backslash-prefixed attribute tokens, e.g. \rad \parallel
+# Matches backslash-prefixed attribute tokens, e.g. \rad \deg \parallel
 _ATTR_RE = re.compile(r'\\[A-Za-z0-9_]{1,15}')
 
 # Number pattern: integer, decimal, or scientific notation (e.g. 1e-12, 3.5E+2)
@@ -38,8 +38,8 @@ def _split_attrs(init_str: str) -> tuple:
     first_match = _ATTR_RE.search(init_str)
     if first_match:
         value_part = init_str[: first_match.start()]
-        attr_part = init_str[first_match.start():]
-        attrs = _ATTR_RE.findall(attr_part)
+        attr_part  = init_str[first_match.start():]
+        attrs      = _ATTR_RE.findall(attr_part)
 
         raw_tokens = re.findall(r'\\[^\s\\]*', attr_part)
         for tok in raw_tokens:
@@ -78,7 +78,7 @@ def _parse_rect(value_str: str):
         return None
 
     real_str = m.group("real")
-    isign = m.group("isign")
+    isign    = m.group("isign")
     imag_str = m.group("imag")
 
     if real_str is None and isign is None:
@@ -138,7 +138,7 @@ def _parse_polar(value_str: str, rad_flag: bool):
     mag = float(mag_str.replace(" ", ""))
 
     angle_str = m.group("angle")
-    asign = m.group("asign")
+    asign     = m.group("asign")
 
     if angle_str is not None:
         angle = float(angle_str)
@@ -153,7 +153,7 @@ def _parse_polar(value_str: str, rad_flag: bool):
         angle_rad = angle
 
     if mag < 0:
-        mag = abs(mag)
+        mag       = abs(mag)
         angle_rad += math.pi
 
     real = mag * math.cos(angle_rad)
@@ -165,7 +165,7 @@ def _parse_polar(value_str: str, rad_flag: bool):
 # Public interface
 # ---------------------------------------------------------------------------
 
-def parse(init_str: str):
+def parse(init_str: str, global_radians: bool = False):
     """
     Parse an initialization string into (real, imag, attributes).
 
@@ -173,6 +173,10 @@ def parse(init_str: str):
     ----------
     init_str : str
         A vector initialization string.
+    global_radians : bool, optional
+        The current value of the module-level ``RADIANS`` flag.  When
+        ``True``, polar angles are interpreted as radians unless ``\\deg``
+        is present in the init string (which forces degree parsing).
 
     Returns
     -------
@@ -182,6 +186,13 @@ def parse(init_str: str):
     ------
     VecError
         If the string cannot be parsed as a valid vector.
+
+    Notes
+    -----
+    ``\\rad`` in the init string always forces radian parsing regardless of
+    ``global_radians``.  ``\\deg`` in the init string forces degree parsing
+    regardless of ``global_radians``.  When neither is present,
+    ``global_radians`` determines the default.
     """
     from vec.core import VecError
 
@@ -193,7 +204,16 @@ def parse(init_str: str):
     if not value_str:
         raise VecError(f"Empty vector value in initialization string: '{init_str}'")
 
-    rad_flag = r"\rad" in attrs
+    # Determine whether to parse the polar angle as radians:
+    #   \rad present           -> radians  (explicit per-vector override)
+    #   \deg present           -> degrees  (explicit per-vector override)
+    #   neither present        -> follow global_radians flag
+    if r"\rad" in attrs:
+        rad_flag = True
+    elif r"\deg" in attrs:
+        rad_flag = False
+    else:
+        rad_flag = global_radians
 
     if "j" in value_str.lower():
         result = _parse_rect(value_str)

@@ -1,11 +1,12 @@
-# Vec — Python Vector Library
+# pyVectors — Python Vector Library
 ## Finalized Specification
 
-**Version:** 1.0  
-**Date:** 2026-03-29  
+**Version:** 1.0.1
+**Date:** 2026-03-31
 **Status:** Approved
+**Authors:** Ron Lanning, Claude Sonnet 4.6
 
-> **Note:** This is an internal design document intended for developers and maintainers. It records the design decisions, implementation rules, and rationale behind the `Vec` library. For installation and usage instructions, see `docs/vec_documentation.md` and `README.md`.
+> **Note:** This is an internal design document intended for developers and maintainers. It records the design decisions, implementation rules, and rationale behind the `pyVectors` library. For installation and usage instructions, see `docs/vec_documentation.md` and `README.md`.
 
 ---
 
@@ -13,35 +14,37 @@
 
 1. [Overview](#overview)
 2. [Package Structure](#package-structure)
-3. [Module-Level Constants](#module-level-constants)
-4. [Class: Vec](#class-vec)
+3. [Module-Level Constants and Variables](#module-level-constants-and-variables)
+4. [Class: Vector](#class-vector)
 5. [Initialization Strings](#initialization-strings)
 6. [Attribute Switches](#attribute-switches)
-7. [Operator Methods](#operator-methods)
-8. [Value Extraction Methods](#value-extraction-methods)
-9. [String Representation Methods](#string-representation-methods)
-10. [Utility Methods](#utility-methods)
-11. [Internal Representation](#internal-representation)
-12. [Scalar Conversion Rules](#scalar-conversion-rules)
-13. [Result Vector Rules](#result-vector-rules)
-14. [Error Handling](#error-handling)
-15. [General Usage Examples](#general-usage-examples)
+7. [Angle Unit Selection](#angle-unit-selection)
+8. [Operator Methods](#operator-methods)
+9. [Value Extraction Methods](#value-extraction-methods)
+10. [String Representation Methods](#string-representation-methods)
+11. [Utility Methods](#utility-methods)
+12. [Internal Representation](#internal-representation)
+13. [Scalar Conversion Rules](#scalar-conversion-rules)
+14. [Result Vector Rules](#result-vector-rules)
+15. [Error Handling](#error-handling)
+16. [Backward Compatibility](#backward-compatibility)
+17. [General Usage Examples](#general-usage-examples)
 
 ---
 
 ## 1. Overview
 
-`Vec` is a Python library for representing and manipulating complex vectors (phasors). Each vector is maintained internally in both rectangular (`a + jb`) and polar (`c ∠ θ`) forms. Vectors can participate in standard Python arithmetic expressions via operator overloading. An attribute switch system allows user-defined metadata to be attached to vector objects.
+`pyVectors` is a Python library for representing and manipulating complex vectors (phasors). Each vector is maintained internally in both rectangular (`a + jb`) and polar (`c ∠ θ`) forms. Vectors can participate in standard Python arithmetic expressions via operator overloading. An attribute switch system allows user-defined metadata to be attached to vector objects.
 
 ---
 
 ## 2. Package Structure
 
 ```
-vec-library/               # GitHub repository root
+pyVectors/                 # GitHub repository root
 ├── vec/                   # Installable Python package
-│   ├── __init__.py        # Public API: exports Vec, RECT, POLAR
-│   ├── core.py            # Vec class implementation
+│   ├── __init__.py        # Public API: exports Vector, Vec, RECT, POLAR, RADIANS
+│   ├── core.py            # Vector class implementation
 │   └── parser.py          # Initialization string parsing logic
 ├── tests/
 │   └── test_vec.py        # Test suite
@@ -58,28 +61,34 @@ The package can be installed globally via `pip`, or the `vec/` folder can be dro
 
 ---
 
-## 3. Module-Level Constants
+## 3. Module-Level Constants and Variables
 
 Defined in `vec/__init__.py` and available upon import:
 
 ```python
-RECT  = 0   # Rectangular form selector for asString()
-POLAR = 1   # Polar form selector for asString()
+RECT    = 0      # Rectangular form selector for asString()
+POLAR   = 1      # Polar form selector for asString()
+RADIANS = False  # Global angle-unit flag (mutable)
 ```
 
 **Usage:**
 ```python
-from vec import Vec, RECT, POLAR
+from vec import Vector, RECT, POLAR
+
+import vec
+vec.RADIANS = True    # enable global radians mode
 ```
+
+`RADIANS` is a mutable module-level variable. It must be set via the module reference (`vec.RADIANS = True`), not via a `from` import, since the `from` import creates a local copy that is disconnected from the module namespace.
 
 ---
 
-## 4. Class: Vec
+## 4. Class: Vector
 
 ### Constructor
 
 ```python
-V = Vec(init_str | None)
+V = Vector(init_str | None)
 ```
 
 - When a valid initialization string is provided, the vector is initialized immediately.
@@ -87,10 +96,10 @@ V = Vec(init_str | None)
 
 **Examples:**
 ```python
-V1 = Vec("-j4.1")
-V2 = Vec(r"5.0 -A1.33 \rad")
-V3 = Vec(None)                  # Uninitialized
-V3.initialize("3 +j4")          # Initialized later
+V1 = Vector("-j4.1")
+V2 = Vector(r"5.0 -A1.33 \rad")
+V3 = Vector(None)                  # Uninitialized
+V3.initialize("3 +j4")             # Initialized later
 ```
 
 ### `initialize(init_str)` Method
@@ -101,9 +110,9 @@ Initializes or **re-initializes** a vector from an initialization string.
 - After re-initialization, the vector holds the new value and any attributes found in the new string.
 
 ```python
-V = Vec(None)
-V.initialize("10 +A45")              # Initialize
-V.initialize(r"2 -j3 \parallel")     # Re-initialize; prior attributes cleared
+V = Vector(None)
+V.initialize("10 +A45")                   # Initialize
+V.initialize(r"2 -j3 \parallel")         # Re-initialize; prior attributes cleared
 ```
 
 ---
@@ -138,8 +147,7 @@ The initialization string defines the vector's value and optional attribute swit
   - Exception: a negative magnitude (e.g., `-3.3`) is accepted and treated as the same magnitude at **angle + 180°**.
 - The angle is preceded by `+A`, `-A`, `<`, or `∠` (Unicode U+2220).
 - If the angle is omitted, it is assumed to be zero.
-- By default, angles in the initialization string are interpreted as **degrees**.
-- If the `\rad` attribute switch is present, the angle is interpreted as **radians**.
+- The angle unit is determined by the rules in Section 7.
 
 | Example String          | Interpretation                    |
 |-------------------------|-----------------------------------|
@@ -165,15 +173,15 @@ All three notations are equivalent and accepted interchangeably:
 User-defined attribute switches may be appended to the initialization string after the vector value. Each attribute begins with `\` and is 1–15 characters long.
 
 ```python
-V = Vec(r"5 +j10 \parallel \admittance")
-V = Vec(r"10 +A45 \rad \source")
+V = Vector(r"5 +j10 \parallel \admittance")
+V = Vector(r"10 +A45 \rad \source")
 ```
 
 ---
 
 ## 6. Attribute Switches
 
-Every `Vec` object maintains an internal list of attribute strings. Attributes function as on/off switches — an attribute either exists in the list or it does not.
+Every `Vector` object maintains an internal list of attribute strings. Attributes function as on/off switches — an attribute either exists in the list or it does not.
 
 ### 6.1 Format
 
@@ -183,13 +191,23 @@ An attribute is a string of 1–15 characters, conventionally prefixed with `\` 
 
 `\rad` is a reserved attribute name with special meaning:
 
-- When set, the initialization string's angle is interpreted in **radians** (instead of the default degrees).
-- When set, `ang()` returns the angle in **radians**.
-- When set, `asString()` displays the angle in **radians**.
+- When set, the initialization string's polar angle is interpreted in **radians**.
+- When set (and `\deg` is not set), `ang()` returns the angle in **radians**.
+- When set (and `\deg` is not set), `polar()` returns the angle in **radians**.
+- When set (and `\deg` is not set), `asString(POLAR)` displays the angle in **radians**.
 - Internally, all angles are always stored as **radians** regardless of this attribute.
-- `\rad` follows the same union rule as all other attributes (see Section 13).
+- `\rad` follows the same union rule as all other attributes (see Section 14).
 
-### 6.3 Attribute Methods
+### 6.3 Reserved Attribute: `\deg`
+
+`\deg` is a reserved attribute name that overrides the angle unit to degrees:
+
+- When set, the initialization string's polar angle is interpreted in **degrees**, regardless of the `RADIANS` global flag.
+- When set, `ang()`, `polar()`, and `asString(POLAR)` output the angle in **degrees**.
+- When both `\rad` and `\deg` are present (e.g., inherited via result union), `\deg` takes priority for all angle output.
+- `\deg` follows the same union rule as all other attributes.
+
+### 6.4 Attribute Methods
 
 ```python
 V.addAttrib(r"\myattr")      # Add an attribute
@@ -199,7 +217,7 @@ V.hasAttrib(r"\myattr")      # Returns True if attribute exists, False otherwise
 
 **Example:**
 ```python
-V = Vec("0.3 +j0.10")
+V = Vector("0.3 +j0.10")
 V.addAttrib(r"\parallel")
 V.addAttrib(r"\admittance")
 
@@ -209,9 +227,48 @@ if V.hasAttrib(r"\parallel"):
 
 ---
 
-## 7. Operator Methods
+## 7. Angle Unit Selection
 
-The following operator methods are implemented. Each operator accepts either a `Vec` object or a scalar (numeric) value as the second operand. Scalars are automatically converted to a `Vec` internally before the operation is performed (see Section 12).
+Angle unit selection is resolved at three levels, applied in the following priority order:
+
+| Priority | Mechanism | Description |
+|----------|-----------|-------------|
+| 1 (highest) | `\deg` attribute on the vector | Forces degrees for input parsing and all angle output |
+| 2 | `\rad` attribute on the vector | Forces radians for input parsing and all angle output |
+| 3 (lowest) | `RADIANS` module-level variable | Sets the default when neither `\rad` nor `\deg` is present |
+
+### 7.1 RADIANS = False (default)
+
+- Polar angle input is parsed as degrees unless `\rad` is present.
+- Angle output is in degrees unless `\rad` is present.
+- `\deg` has no visible effect (already in degrees mode), but is stored and propagates via union.
+
+### 7.2 RADIANS = True
+
+- Every vector created from an initialization string automatically receives the `\rad` attribute, **unless** `\deg` is present in the init string.
+- If `\deg` is present, `\rad` is not injected, and `\deg` governs the vector's angle I/O.
+- Polar angle input is parsed as radians by default (or degrees if `\deg` is present).
+- Angle output is in radians by default (or degrees if `\deg` is present).
+
+### 7.3 Auto-injection applies to init-string construction only
+
+The `RADIANS` auto-injection of `\rad` applies only when a vector is constructed from an initialization string (`Vector(init_str)` or `initialize(init_str)`). Arithmetic result vectors are **not** subject to auto-injection — they inherit their angle unit attributes purely through the union rule (Section 14.1).
+
+### 7.4 Parsing interaction
+
+The `parser.parse()` function receives the `global_radians` flag from `Vector._parse_and_set()`. The parser resolves the effective `rad_flag` for polar angle parsing as follows:
+
+1. If `\rad` is present in attrs → `rad_flag = True`
+2. If `\deg` is present in attrs → `rad_flag = False`
+3. Otherwise → `rad_flag = global_radians`
+
+After parsing, `Vector._parse_and_set()` applies the RADIANS auto-injection to the attribute list.
+
+---
+
+## 8. Operator Methods
+
+The following operator methods are implemented. Each operator accepts either a `Vector` object or a scalar (numeric) value as the second operand. Scalars are automatically converted to a `Vector` internally before the operation is performed (see Section 13).
 
 | Method        | Operation            |
 |---------------|----------------------|
@@ -228,26 +285,26 @@ The following operator methods are implemented. Each operator accepts either a `
 | `__eq__`      | `V1 == V2` (equality with epsilon tolerance) |
 | `__repr__`    | Developer-friendly representation |
 
-Every arithmetic operation **always returns a new `Vec` object**. The operand vectors are never modified.
+Every arithmetic operation **always returns a new `Vector` object**. The operand vectors are never modified.
 
 ---
 
-## 8. Value Extraction Methods
+## 9. Value Extraction Methods
 
 ```python
 V.real()          # Returns the real component (float)
 V.img()           # Returns the imaginary component (float)
 V.mag()           # Returns the magnitude (float)
-V.ang()           # Returns the angle; radians if \rad is set, degrees otherwise (float)
+V.ang()           # Returns the angle per Section 7 rules (float)
 a, b = V.rect()   # Returns (real, imaginary) as a tuple
 mag, ang = V.polar()  # Returns (magnitude, angle) as a tuple
 ```
 
-**Note:** `ang()` and `polar()` respect the `\rad` attribute for the returned angle unit.
+**Note:** `ang()` and `polar()` respect the angle unit selection rules in Section 7.
 
 ---
 
-## 9. String Representation Methods
+## 10. String Representation Methods
 
 ### `asString(form, fmt1=None, fmt2=None)`
 
@@ -269,7 +326,7 @@ V.asString(RECT, fmt1="3.2f", fmt2="3.2f")
 
 **Polar form output:** `[magnitude] ∠ [angle]`
 
-- Angle is displayed in degrees or radians depending on the `\rad` attribute.
+- Angle unit follows the rules in Section 7.
 
 ```python
 V.asString(POLAR)
@@ -285,25 +342,25 @@ Returns a developer-friendly string suitable for display in a Python REPL or deb
 
 ```python
 repr(V)
-# --> "Vec('3.2 +j1.5')"
+# --> "Vector('3.2 +j1.5')"
 ```
 
 ---
 
-## 10. Utility Methods
+## 11. Utility Methods
 
 ### `conjugate()`
 
-Returns a new `Vec` object that is the complex conjugate of the vector (negates the imaginary component).
+Returns a new `Vector` object that is the complex conjugate of the vector (negates the imaginary component).
 
 ```python
-V  = Vec("3 +j4")
-Vc = V.conjugate()   # --> Vec representing 3 -j4
+V  = Vector("3 +j4")
+Vc = V.conjugate()   # --> Vector representing 3 -j4
 ```
 
 ### `copy()`
 
-Returns a new, independent `Vec` object with the same value and attributes as the original.
+Returns a new, independent `Vector` object with the same value and attributes as the original.
 
 ```python
 V2 = V1.copy()
@@ -311,17 +368,17 @@ V2 = V1.copy()
 
 ---
 
-## 11. Internal Representation
+## 12. Internal Representation
 
 - Vectors are stored internally in **both** rectangular (`a + jb`) and polar (`c ∠ θ`) forms at all times.
-- Angles are **always stored internally in radians**, regardless of the `\rad` attribute setting.
-- The `\rad` attribute affects only **input parsing** (initialization strings) and **output formatting** (`ang()`, `polar()`, `asString()`).
+- Angles are **always stored internally in radians**, regardless of any attribute setting or the `RADIANS` flag.
+- The angle unit attributes and `RADIANS` flag affect only **input parsing** and **output formatting**.
 
 ---
 
-## 12. Scalar Conversion Rules
+## 13. Scalar Conversion Rules
 
-When an arithmetic operator receives a scalar (non-`Vec`) operand, the scalar is converted to a `Vec` internally as follows:
+When an arithmetic operator receives a scalar (non-`Vector`) operand, the scalar is converted to a `Vector` internally as follows:
 
 - The scalar value becomes the **real component**.
 - The imaginary component is set to **+j0**.
@@ -329,42 +386,48 @@ When an arithmetic operator receives a scalar (non-`Vec`) operand, the scalar is
 - The scalar-as-vector carries **no attributes**.
 
 ```python
-result = 5 * V1     # 5 is converted to Vec("5 +j0") internally
-result = V1 + 2.5   # 2.5 is converted to Vec("2.5 +j0") internally
+result = 5 * V1     # 5 is converted to Vector("5 +j0") internally
+result = V1 + 2.5   # 2.5 is converted to Vector("2.5 +j0") internally
 ```
 
 ---
 
-## 13. Result Vector Rules
+## 14. Result Vector Rules
 
 When an operation produces a result vector, the following rules govern its state:
 
-### 13.1 Attribute List
+### 14.1 Attribute List
 
 The result vector's attribute list is the **union** of the attribute lists of both operands. If both operands carry the same attribute, it appears only once in the result.
 
 ```python
-V1 = Vec(r"5 +j10 \parallel")
-V2 = Vec(r"3 +j4 \admittance")
+V1 = Vector(r"5 +j10 \parallel")
+V2 = Vector(r"3 +j4 \admittance")
 V3 = V1 + V2
 # V3 has attributes: \parallel, \admittance
 ```
 
-> **Note:** The `Vec` class performs the union mechanically and does not validate whether the combination of attributes is semantically meaningful. It is the responsibility of the calling application to ensure that attributes on operand vectors are compatible before performing operations.
+> **Note:** The `Vector` class performs the union mechanically and does not validate whether the combination of attributes is semantically meaningful. It is the responsibility of the calling application to ensure that attributes on operand vectors are compatible before performing operations.
 
-### 13.2 The `\rad` Attribute on Results
+### 14.2 The `\rad` and `\deg` Attributes on Results
 
-Because `\rad` is simply a reserved attribute (not a special case), it follows the same union rule. If **either** operand has `\rad` set, the result will have `\rad` set.
+Both `\rad` and `\deg` follow the same union rule as all other attributes. If **either** operand has `\rad` set, the result will have `\rad` set. Likewise for `\deg`.
+
+When a result carries both `\rad` and `\deg`, `\deg` takes priority for all angle output (degrees mode).
 
 > **Important:** If `V1` has `\rad` and `V2` does not, the result `V3 = V1 + V2` will display angles in radians, even if `V2`'s angle was originally expressed in degrees. This is expected behavior.
 
-### 13.3 Initialization State
+### 14.3 RADIANS Auto-Injection Does Not Apply to Results
+
+The `RADIANS` global flag auto-injects `\rad` only when a vector is created directly from an initialization string. Arithmetic result vectors are **never** subject to auto-injection. Their angle unit attributes are determined purely by the union of their operands' attributes.
+
+### 14.4 Initialization State
 
 All result vectors are considered **fully initialized**.
 
 ---
 
-## 14. Error Handling
+## 15. Error Handling
 
 The library defines a custom exception class `VecError` (inheriting from `Exception`) for all library-specific errors.
 
@@ -377,15 +440,27 @@ The library defines a custom exception class `VecError` (inheriting from `Except
 
 ---
 
-## 15. General Usage Examples
+## 16. Backward Compatibility
+
+The `Vec` name from v1.0.0 is preserved as a module-level alias:
+
+```python
+Vec = Vector   # defined in vec/core.py and exported from vec/__init__.py
+```
+
+All code written against v1.0.0 continues to work without modification. `Vec` and `Vector` are the same class object — `Vec is Vector` evaluates to `True`.
+
+---
+
+## 17. General Usage Examples
 
 ### Basic Instantiation and Arithmetic
 
 ```python
-from vec import Vec, RECT, POLAR
+from vec import Vector, RECT, POLAR
 
-V1 = Vec(r"5 +j10 \parallel")
-V2 = Vec(r"3 +A22 \parallel")
+V1 = Vector(r"5 +j10 \parallel")
+V2 = Vector(r"3 +A22 \parallel")
 V3 = 5 * V1 / V2
 
 print(V3.asString(RECT))
@@ -395,17 +470,17 @@ print(V3.asString(POLAR, fmt1="6.3f", fmt2="5.1f"))
 ### Deferred Initialization
 
 ```python
-V1 = Vec(None)
+V1 = Vector(None)
 V1.initialize(r"5 +j10 \parallel")
 
-V2 = Vec(None)
+V2 = Vector(None)
 V2.initialize(r"3 +A22 \parallel")
 ```
 
 ### Attributes
 
 ```python
-V = Vec("0.3 +j0.10")
+V = Vector("0.3 +j0.10")
 V.addAttrib(r"\parallel")
 V.addAttrib(r"\admittance")
 
@@ -418,8 +493,8 @@ V.delAttrib(r"\parallel")
 ### Operator Examples
 
 ```python
-V1 = Vec("3 +j4")
-V2 = Vec("1 -j2")
+V1 = Vector("3 +j4")
+V2 = Vector("1 -j2")
 
 V3 = V1 + V2          # Vector addition
 V4 = V1 * V2          # Vector multiplication
@@ -431,12 +506,29 @@ V6 = V1.copy()        # Independent copy
 print(V1 == V2)       # False (epsilon-tolerant comparison)
 ```
 
-### Radians Mode
+### Per-Vector Radians Mode
 
 ```python
-V = Vec(r"5.0 +A1.5708 \rad")   # angle in radians (~90°)
-print(V.ang())                   # returns angle in radians
-print(V.asString(POLAR))         # displays angle in radians
+V = Vector(r"5.0 +A1.5708 \rad")   # angle in radians (~90°)
+print(V.ang())                        # returns angle in radians
+print(V.asString(POLAR))              # displays angle in radians
+```
+
+### Global Radians Mode
+
+```python
+import vec
+from vec import Vector, RECT, POLAR
+
+vec.RADIANS = True
+
+V1 = Vector("10 +A1.5708")           # parsed as radians; \rad auto-injected
+V2 = Vector(r"10 +A90 \deg")        # \deg override; parsed as degrees
+
+print(V1.ang())                       # radians
+print(V2.ang())                       # degrees
+
+vec.RADIANS = False
 ```
 
 ---

@@ -1,11 +1,12 @@
-# Vec — Python Vector Library
+# pyVectors — Python Vector Library
 
 A Python library for representing and manipulating complex vectors (phasors). Vectors can be expressed in rectangular (`a + jb`) or polar (`M ∠ θ`) form and used directly in arithmetic expressions.
 
 This vector arithmetic module represents an upgrade to a Python class I created years ago to aid in the design of UHF and Microwave amplifiers. The library would be especially useful to engineering students who analyze electrical circuits containing reactive components. Considering my humble introduction to A.C. Circuit Analysis in the early 1970s, where vector operations were carried out on a slide rule, modern computer solutions allow students to focus on theory without becoming lost in the repetitive conversions between rectangular and polar form vectors.
 
-
 Feel free to email feedback and offer suggestions for feature updates.
+
+**Authors:** Ron Lanning, Claude Sonnet 4.6
 
 ---
 
@@ -14,10 +15,12 @@ Feel free to email feedback and offer suggestions for feature updates.
 - Flexible initialization strings for both rectangular and polar input
 - Both forms maintained internally — query either at any time
 - Full arithmetic operator support: `+`, `-`, `*`, `/`, negation, `abs()`
-- Scalars can be used directly as operands alongside `Vec` objects
+- Scalars can be used directly as operands alongside `Vector` objects
 - User-defined attribute switches that propagate through calculations
-- Angles default to degrees; optional radians mode via the `\rad` attribute
+- Angles default to degrees; set `RADIANS = True` for a global radians default
+- Per-vector overrides via the `\rad` attribute (radians) and `\deg` attribute (degrees)
 - Clear error reporting through a custom `VecError` exception
+- Backward-compatible: the `Vec` alias preserves all v1.0.0 code without modification
 
 ---
 
@@ -28,7 +31,7 @@ Feel free to email feedback and offer suggestions for feature updates.
 Clone or download this repository, then install with pip:
 
 ```bash
-cd vec-library
+cd pyVectors
 pip install -e .
 ```
 
@@ -39,11 +42,11 @@ Alternatively, copy the `vec/` folder directly into your project directory — n
 ## Quick Start
 
 ```python
-from vec import Vec, RECT, POLAR
+from vec import Vector, RECT, POLAR
 
 # Create vectors from initialization strings
-V1 = Vec("3 +j4")          # Rectangular: 3 + j4
-V2 = Vec("10 <45")          # Polar: magnitude 10, angle 45°
+V1 = Vector("3 +j4")          # Rectangular: 3 + j4
+V2 = Vector("10 <45")          # Polar: magnitude 10, angle 45°
 
 # Arithmetic
 V3 = V1 + V2
@@ -65,24 +68,37 @@ print(V1.mag(),  V1.ang())  # 5.0  53.13...
 ### Rectangular
 
 ```python
-Vec("3.2 +j1.5")      # 3.2 + j1.5
-Vec("-1 -j6.1")        # -1 - j6.1
-Vec("-j4.1")           # 0 - j4.1
+Vector("3.2 +j1.5")      # 3.2 + j1.5
+Vector("-1 -j6.1")        # -1 - j6.1
+Vector("-j4.1")           # 0 - j4.1
 ```
 
 ### Polar (degrees by default)
 
 ```python
-Vec("10 <45")          # magnitude 10, angle 45°
-Vec("10 ∠45")          # same, using Unicode angle symbol
-Vec("10 +A45")         # same, using +A notation
-Vec("10 -A30")         # magnitude 10, angle -30°
+Vector("10 <45")          # magnitude 10, angle 45°
+Vector("10 ∠45")          # same, using Unicode angle symbol
+Vector("10 +A45")         # same, using +A notation
+Vector("10 -A30")         # magnitude 10, angle -30°
 ```
 
-### Polar (radians)
+### Polar (radians — per vector)
 
 ```python
-Vec(r"5 +A1.5708 \rad")   # magnitude 5, angle ≈ π/2 rad
+Vector(r"5 +A1.5708 \rad")   # magnitude 5, angle ≈ π/2 rad
+```
+
+### Polar (radians — global default)
+
+```python
+import vec
+vec.RADIANS = True             # all new vectors default to radians I/O
+
+V = Vector("5 +A1.5708")      # angle parsed as radians (~90°)
+print(V.ang())                 # returns angle in radians
+
+V2 = Vector(r"10 +A45 \deg") # \deg overrides: angle parsed as degrees
+print(V2.ang())                # returns angle in degrees
 ```
 
 ---
@@ -90,8 +106,8 @@ Vec(r"5 +A1.5708 \rad")   # magnitude 5, angle ≈ π/2 rad
 ## Arithmetic Operators
 
 ```python
-V1 = Vec("3 +j4")
-V2 = Vec("1 -j2")
+V1 = Vector("3 +j4")
+V2 = Vector("1 -j2")
 
 V3 = V1 + V2       # Addition
 V4 = V1 - V2       # Subtraction
@@ -112,8 +128,8 @@ V9 = V1 + 5
 Attribute switches are string tags you can attach to a vector. They propagate to the result whenever two vectors are combined in an arithmetic operation.
 
 ```python
-V1 = Vec(r"5 +j10 \parallel")
-V2 = Vec(r"3 +j4 \admittance")
+V1 = Vector(r"5 +j10 \parallel")
+V2 = Vector(r"3 +j4 \admittance")
 V3 = V1 + V2
 
 V3.hasAttrib(r"\parallel")    # True — inherited from V1
@@ -123,7 +139,7 @@ V3.hasAttrib(r"\admittance")  # True — inherited from V2
 You can also add and remove attributes manually:
 
 ```python
-V = Vec("3 +j4")
+V = Vector("3 +j4")
 V.addAttrib(r"\source")
 V.delAttrib(r"\source")
 ```
@@ -133,10 +149,10 @@ V.delAttrib(r"\source")
 ## Worked Example — Parallel Impedance
 
 ```python
-from vec import Vec, RECT, POLAR
+from vec import Vector, RECT, POLAR
 
-Z1 = Vec("0 +j100")    # Inductive reactance
-Z2 = Vec("75 +j0")     # Resistance
+Z1 = Vector("0 +j100")    # Inductive reactance
+Z2 = Vector("75 +j0")     # Resistance
 
 Z = (Z1 * Z2) / (Z1 + Z2)
 
@@ -149,16 +165,28 @@ print(Z.asString(POLAR, fmt1=".3f", fmt2=".2f"))   # 60.976 ∠ 53.13
 ## Worked Example — Complex Power
 
 ```python
-from vec import Vec, RECT, POLAR
+from vec import Vector, RECT, POLAR
 
-V = Vec("120 <0")      # Voltage phasor
-I = Vec("10 <-30")     # Current phasor (lagging)
+V = Vector("120 <0")      # Voltage phasor
+I = Vector("10 <-30")     # Current phasor (lagging)
 
-S = V * I.conjugate()  # Apparent power
+S = V * I.conjugate()     # Apparent power
 
 print(f"Apparent power: {abs(S):.2f} VA")
 print(f"Real power (P): {S.real():.2f} W")
 print(f"Reactive  (Q):  {S.img():.2f} VAR")
+```
+
+---
+
+## Backward Compatibility
+
+All code written for v1.0.0 using the `Vec` class name continues to work without any changes:
+
+```python
+from vec import Vec, RECT, POLAR   # Vec is now an alias for Vector
+
+V = Vec("3 +j4")                   # works exactly as before
 ```
 
 ---
@@ -169,6 +197,7 @@ Full reference documentation is in [`docs/vec_documentation.md`](docs/vec_docume
 
 - All initialization string formats with examples
 - All methods with parameters, return types, and examples
+- The `RADIANS` global flag and `\deg` attribute override
 - Attribute switch system and propagation rules
 - Error handling
 - Additional worked examples
